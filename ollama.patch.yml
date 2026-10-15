@@ -1,0 +1,46 @@
+# Local Ollama provider. Usage: pnpm dsh web --patch ollama.patch.yml
+#
+# Ollama serves OpenAI Chat Completions at http://localhost:11434/v1. It does
+# not check the bearer token, but pi-ai requires one: OLLAMA_API_KEY in the
+# repository .env holds a placeholder.
+#
+# Each model's contextWindow must equal the num_ctx Ollama loads it with
+# (`ollama ps`, CONTEXT column), not the trained maximum `ollama show` prints;
+# without a num_ctx parameter this server loads 32768. To add a model, create
+# a tag that pins its context and list that tag:
+#   printf 'FROM <model>\nPARAMETER num_ctx 65536\n' > Modelfile
+#   ollama create <model>-64k -f Modelfile
+#
+# Selecting a model in the composer saves it as the default for new sessions.
+# Do not set agent-default-model here: an overlay row blocks that save.
+
+- id: llm-pi-ai
+  config:
+    providers:
+      ollama:
+        displayName: Ollama (local)
+        api: openai-completions
+        baseURL: http://localhost:11434/v1
+        apiKeyEnv: OLLAMA_API_KEY
+        # Ollama ignores `max_completion_tokens`, pi-ai's default for unknown
+        # endpoints, so the output cap must travel as `max_tokens`. pi-ai sends
+        # a reasoning model's system prompt as the `developer` role, which some
+        # Ollama chat templates drop; every template accepts `system`.
+        compat:
+          maxTokensField: max_tokens
+          supportsDeveloperRole: false
+        models:
+          # Local tag created from qwen3.8:27b with `PARAMETER num_ctx 65536`;
+          # 64k is the largest context that keeps this model fully on a 24 GB GPU.
+          - id: qwen3.8:27b-64k
+            name: Qwen3.8 27B (64k)
+            # Must equal the tag's num_ctx: Ollama silently truncates longer
+            # prompts instead of failing.
+            contextWindow: 65536
+            maxTokens: 16384
+            input: [text, image]
+            # Ollama switches this model's thinking only on or off; any
+            # reasoning_effort other than `none` turns it on.
+            reasoningEfforts:
+              off: none
+              high: high
